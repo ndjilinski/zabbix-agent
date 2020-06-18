@@ -1,0 +1,77 @@
+---
+- block:
+  - name: search for the package "{{ rpm }}" 
+    yum:
+      list: "{{ rpm }}"
+    register: rpm_result
+
+  - name: check the installed version of "{{ rpm }}"
+    set_fact:
+      is_rpm_in_yum: false
+      rpm_version_installed: "{{ rpm_result | json_query(\"results[?yumstate=='installed'].version\") }}"
+      rpm_version_available: "{{ rpm_result | json_query(\"results[?yumstate=='available'].version\") }}"
+
+  - debug: var=rpm_version_installed
+
+  - name: check if the package "{{ rpm }}" installed
+    set_fact:
+      rpm_version_installed: "{{ rpm_version_installed + [ '0' ] }}"
+    when: rpm_version_installed|length == 0
+
+  - block:
+    - name: Clean up old rpms
+      yum:
+        name: "{{ rpm_to_delete }}"
+        state: absent
+
+    - name: Check if yum provides the needed package "{{ rpm }}" version "{{ rpm_version_target }}"
+      set_fact:
+        is_rpm_in_yum: true
+      when: rpm_version_target is version(item,'<')
+      with_items: "{{ rpm_version_available }}"
+
+    - block:
+      - name: copy "{{ rpm_el6_file }}" to /tmp
+        copy:
+          src: "{{ rpm_el6_file }}"
+          dest: /tmp/zabbix_agent.rpm
+        when: ansible_distribution_major_version == "6"
+
+      - name: copy "{{ rpm_el7_file }}" to /tmp
+        copy:
+          src: "{{ rpm_el7_file }}"
+          dest: /tmp/zabbix_agent.rpm
+        when: ansible_distribution_major_version == "7"
+
+      - name: Install Zabbix agent from the local RPM
+        yum:
+          name: /tmp/zabbix_agent.rpm
+          state: present
+
+      when: is_rpm_in_yum == false
+
+    - name: Install Zabbix agent from YUM
+      yum:
+        name: "{{ rpm }}"
+        state: latest
+      when: is_rpm_in_yum == true
+
+    - name: Push configuration for Zabbix agent
+      ini_file:
+        dest: /etc/zabbix/zabbix_agentd.conf
+        section: null
+        option: Server
+        value: "{{zabbix_agent.server|join(',')}}"
+      notify:
+      - Restart zabbix-agent
+
+    - name: Ensure the service is running and enabled
+      service:
+        name: "{{ service_name }}"
+        enabled: yes
+        state: started
+
+    when: rpm_version_installed[0] is version(rpm_version_target, '<')
+
+  when: ansible_os_family == "RedHat" or ansible_distribution_file_variety == "OracleLinux"
+

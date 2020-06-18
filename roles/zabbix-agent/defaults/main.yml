@@ -1,0 +1,18 @@
+---
+# defaults file for zabbix-agent-check
+zabbix_agent:
+  server:
+    - 0.0.0.0/0
+    - ::/0
+
+rpm: "zabbix-agent"
+service_name: "zabbix-agent"
+
+rpm_to_delete:
+  - zabbix
+  - zabbix22
+
+rpm_version_target: "3.4"
+
+rpm_el6_file: "zabbix-agent-3.4.15-1.el6.x86_64.rpm"
+rpm_el7_file: "zabbix-agent-3.4.15-1.el7.x86_64.rpm"
